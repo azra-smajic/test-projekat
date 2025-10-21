@@ -7,12 +7,12 @@ namespace WebApplication2.Controllers
 {
     [ApiController]
     [Route("[controller]")]
-    public class StudentController : ControllerBase
+    public class StudentController(DatabaseContext databaseContext) : ControllerBase
     {
         [HttpGet("{id}")]
         public ActionResult<StudentGetByIdResponse> GetById(int id)
         {
-            var s = DatabaseContext.Studenti.Find(x => x.Id == id);
+            var s = databaseContext.Studenti.ToList().Find(x => x.Id == id);
             var response = new StudentGetByIdResponse(s.Id, s.Ime, s.Prezime, s.Opstina != null ? s.Opstina.Naziv : " ");
             return Ok(response);
         }
@@ -20,39 +20,47 @@ namespace WebApplication2.Controllers
         [HttpPost]
         public void Post(StudentAddRequest student)
         {
-            int id = DatabaseContext.Studenti.Max(x => x.Id);
             var s = new Student
             {
-                Id = id + 1,
                 Ime = student.Ime,
                 Prezime = student.Prezime,
                 CreatedAt = DateTime.Now,
                 OpstinaId = student.OpstinaId
             };
-            DatabaseContext.Studenti.Add(s);
+            databaseContext.Studenti.Add(s);
+            databaseContext.SaveChanges();
         }
 
         [HttpDelete]
-        public IActionResult Delete(int id)
+        public ActionResult Delete(int id)
         {
-            var s = DatabaseContext.Studenti.Find(x => x.Id == id);
+            var s = databaseContext.Studenti.ToList().Find(x => x.Id == id);
             if (s == null)
-                return NotFound();
+                throw new Exception("Student nije pronadjen");
             try
             {
-                DatabaseContext.Studenti.Remove(s);
+                databaseContext.Studenti.Remove(s);
+                databaseContext.SaveChanges();
                 return Ok();
             }
             catch (Exception ex)
             {
-                return StatusCode(500);
+                throw ex;
             }
         }
 
         [HttpGet]
-        public List<StudentGetAllResponse> GetAll()
+        public List<StudentGetAllResponse> GetAll(string? ime, string? nazivOpstine)
         {
-            return DatabaseContext.Studenti.Select(x => new StudentGetAllResponse(x.Ime, x.Prezime)).ToList();
+            var studentiQuery = databaseContext.Studenti.AsQueryable();
+
+            if (!string.IsNullOrWhiteSpace(ime))
+                studentiQuery = studentiQuery.Where(x => x.Ime.ToLower().StartsWith(ime.ToLower()));
+
+            if (!string.IsNullOrWhiteSpace(nazivOpstine))
+                studentiQuery = studentiQuery.Where(x => x.Opstina.Naziv.ToLower().StartsWith(nazivOpstine.ToLower()));
+
+            return studentiQuery.Select(x => new StudentGetAllResponse(x.Ime, x.Prezime)).ToList();
         }
     }
 }
